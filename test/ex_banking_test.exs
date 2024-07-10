@@ -68,6 +68,16 @@ defmodule ExBankingTest do
     {:ok, 4.50} = ExBanking.withdraw(user, 5.50, currency)
   end
 
+  test "decimal" do
+    user = "Yan"
+    currency = "MDL"
+    :ok = ExBanking.create_user(user)
+    {:ok, 12.52} = ExBanking.deposit(user, 12.52, currency)
+    {:ok, +0.0} = ExBanking.withdraw(user, 12.520001, currency)
+    {:ok, 10.29} = ExBanking.deposit(user, 10.2999, currency)
+    {:ok, +0.0} = ExBanking.withdraw(user, 10.29, currency)
+  end
+
   test "rate limitting for deposit" do
     user = "Denys"
     currency = "MDL"
@@ -75,12 +85,15 @@ defmodule ExBankingTest do
 
     # at 1st pass 10 of 30 should be succeeded
     max_requests = Application.get_env(:ex_banking, :max_requests, 10)
+    account_crud_delay = Application.get_env(:ex_banking, :account_crud_delay, 0)
     parallel_cnt = max_requests * 2
     {succeeded_cnt_1, _, _} = run_in_parallel(parallel_cnt, fn i -> ExBanking.deposit(user, i, currency) end)
     assert succeeded_cnt_1 < parallel_cnt
     assert succeeded_cnt_1 >= max_requests
     #TODO: succeeded count can be > 10 if config :account_crud_delay is 0
-    assert succeeded_cnt_1 == max_requests
+    if account_crud_delay > 0 do
+      assert succeeded_cnt_1 == max_requests
+    end
 
     # at 2nd pass all 10 should be succeeded
     {succeeded_cnt_2, _, _} = run_in_parallel(10, fn i -> ExBanking.deposit(user, i, currency) end)

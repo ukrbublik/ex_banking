@@ -35,19 +35,19 @@ defmodule ExBanking.AccountsRegistry do
   end
 
   def deposit(user, amount, currency) do
-    change_amount(user, fn (balance) -> (balance + amount) end, currency)
+    change_amount(user, fn (balance) -> (balance + Account.format_balance(amount)) end, currency)
   end
 
   def withdraw(user, amount, currency) do
-    change_amount(user, fn (balance) -> (balance - amount) end, currency)
+    change_amount(user, fn (balance) -> (balance - Account.format_balance(amount)) end, currency)
   end
 
   def send(sender, receiver, amount, currency) do
     #TODO: don't need to use mutex? https://hexdocs.pm/mutex/readme.html
     with {:ok, new_sender_amount}
-        <- change_amount(sender, fn (balance) -> (balance - amount) end, currency),
+        <- change_amount(sender, fn (balance) -> (balance - Account.format_balance(amount)) end, currency),
       {:ok, new_receiver_amount}
-        <- change_amount(receiver, fn (balance) -> (balance + amount) end, currency)
+        <- change_amount(receiver, fn (balance) -> (balance + Account.format_balance(amount)) end, currency)
     do
       {:ok, new_sender_amount, new_receiver_amount}
     else
