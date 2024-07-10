@@ -6,7 +6,6 @@ defmodule ExBanking do
   alias ExBanking.RateLimiter
   alias ExBanking.AccountsRegistry
 
-  #TODO: call RateLimiter.end_request more gracefully
 
   @doc """
   Creates new user in the system.
@@ -32,18 +31,12 @@ defmodule ExBanking do
   def deposit(user, amount, currency)
     when is_binary(user) and is_number(amount) and is_binary(currency) and amount > 0
   do
-    with :ok <- RateLimiter.start_request(user),
-      {:ok, new_amount} <- AccountsRegistry.deposit(user, amount, currency)
-    do
-      RateLimiter.end_request(user)
-      {:ok, new_amount}
-    else
-      {:error, :too_many_requests_to_user, _} ->
-        {:error, :too_many_requests_to_user}
-      {:error, reason, _} ->
-        RateLimiter.end_request(user)
-        {:error, reason}
-    end
+    RateLimiter.with_rate_limit(user, fn ->
+      case AccountsRegistry.deposit(user, amount, currency) do
+        {:ok, new_amount} -> {:ok, new_amount}
+        {:error, reason, _} -> {:error, reason}
+      end
+    end)
   end
   def deposit(_, _, _), do: {:error, :wrong_arguments}
 
@@ -56,18 +49,12 @@ defmodule ExBanking do
   def withdraw(user, amount, currency)
     when is_binary(user) and is_number(amount) and is_binary(currency) and amount > 0
   do
-    with :ok <- RateLimiter.start_request(user),
-      {:ok, new_amount} <- AccountsRegistry.withdraw(user, amount, currency)
-    do
-      RateLimiter.end_request(user)
-      {:ok, new_amount}
-    else
-      {:error, :too_many_requests_to_user, _} ->
-        {:error, :too_many_requests_to_user}
-      {:error, reason, _} ->
-        RateLimiter.end_request(user)
-        {:error, reason}
-    end
+    RateLimiter.with_rate_limit(user, fn ->
+      case AccountsRegistry.withdraw(user, amount, currency) do
+        {:ok, new_amount} -> {:ok, new_amount}
+        {:error, reason, _} -> {:error, reason}
+      end
+    end)
   end
   def withdraw(_, _, _), do: {:error, :wrong_arguments}
 
@@ -79,18 +66,12 @@ defmodule ExBanking do
   def get_balance(user, currency)
     when is_binary(user) and is_binary(currency)
   do
-    with :ok <- RateLimiter.start_request(user),
-      {:ok, amount} <- AccountsRegistry.get_balance(user, currency)
-    do
-      RateLimiter.end_request(user)
-      {:ok, amount}
-    else
-      {:error, :too_many_requests_to_user, _} ->
-        {:error, :too_many_requests_to_user}
-      {:error, reason, _} ->
-        RateLimiter.end_request(user)
-        {:error, reason}
-    end
+    RateLimiter.with_rate_limit(user, fn ->
+      case AccountsRegistry.get_balance(user, currency) do
+        {:ok, new_amount} -> {:ok, new_amount}
+        {:error, reason, _} -> {:error, reason}
+      end
+    end)
   end
   def get_balance(_, _), do: {:error, :wrong_arguments}
 
@@ -106,31 +87,23 @@ defmodule ExBanking do
   def send(from_user, to_user, amount, currency)
     when is_binary(from_user) and is_binary(to_user) and is_number(amount) and is_binary(currency) and amount > 0 and from_user != to_user
   do
-    with :ok <- RateLimiter.start_request(from_user, to_user),
-      {:ok, sender_amount} <- AccountsRegistry.get_balance(from_user, currency),
-      {:amount_check, true} <- {:amount_check, sender_amount >= amount},
-      {:ok, new_sender_amount, new_receiver_amount} <- AccountsRegistry.send(from_user, to_user, amount, currency)
-    do
-      RateLimiter.end_request(from_user, to_user)
-      {:ok, new_sender_amount, new_receiver_amount}
-    else
-      {:error, :too_many_requests_to_user, user} when user == from_user ->
-        {:error, :too_many_requests_to_sender}
-      {:error, :too_many_requests_to_user, user} when user == to_user ->
-        {:error, :too_many_requests_to_receiver}
-      {:error, :user_does_not_exist, user} when user == from_user ->
-        RateLimiter.end_request(from_user, to_user)
-        {:error, :sender_does_not_exist}
-      {:error, :user_does_not_exist, user} when user == to_user ->
-        RateLimiter.end_request(from_user, to_user)
-        {:error, :receiver_does_not_exist}
-      {:amount_check, false} ->
-        RateLimiter.end_request(from_user, to_user)
-        {:error, :not_enough_money}
-      {:error, reason, _user} ->
-        RateLimiter.end_request(from_user, to_user)
-        {:error, reason}
-    end
+    RateLimiter.with_rate_limit(from_user, to_user, fn ->
+      with {:ok, sender_amount} <- AccountsRegistry.get_balance(from_user, currency),
+        {:amount_check, true} <- {:amount_check, sender_amount >= amount},
+        {:ok, new_sender_amount, new_receiver_amount} <- AccountsRegistry.send(from_user, to_user, amount, currency)
+      do
+        {:ok, new_sender_amount, new_receiver_amount}
+      else
+        {:error, :user_does_not_exist, user} when user == from_user ->
+          {:error, :sender_does_not_exist}
+        {:error, :user_does_not_exist, user} when user == to_user ->
+          {:error, :receiver_does_not_exist}
+        {:amount_check, false} ->
+          {:error, :not_enough_money}
+        {:error, reason, _user} ->
+          {:error, reason}
+      end
+    end)
   end
   def send(_, _, _, _), do: {:error, :wrong_arguments}
 

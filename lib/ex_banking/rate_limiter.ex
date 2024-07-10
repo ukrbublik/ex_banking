@@ -18,19 +18,45 @@ defmodule ExBanking.RateLimiter do
     {:ok, initial_state}
   end
 
-  def start_request(user) do
+  def with_rate_limit(user, fun) do
+    case start_request(user) do
+      :ok ->
+        res = fun.()
+        end_request(user)
+        res
+      {:error, :too_many_requests_to_user, _} ->
+        {:error, :too_many_requests_to_user}
+    end
+  end
+
+  def with_rate_limit(user1, user2, fun) do
+    case start_request(user1, user2) do
+      :ok ->
+        res = fun.()
+        end_request(user1, user2)
+        res
+      {:error, :too_many_requests_to_user, user} when user == user1 ->
+        {:error, :too_many_requests_to_sender}
+      {:error, :too_many_requests_to_user, user} when user == user2 ->
+        {:error, :too_many_requests_to_receiver}
+    end
+  end
+
+  # Private
+
+  defp start_request(user) do
     GenServer.call(__MODULE__, {:start_request, user, user})
   end
 
-  def start_request(user1, user2) do
+  defp start_request(user1, user2) do
     GenServer.call(__MODULE__, {:start_request, user1, user2})
   end
 
-  def end_request(user) do
+  defp end_request(user) do
     GenServer.cast(__MODULE__, {:end_request, user})
   end
 
-  def end_request(user1, user2) do
+  defp end_request(user1, user2) do
     GenServer.cast(__MODULE__, {:end_request, user1})
     GenServer.cast(__MODULE__, {:end_request, user2})
   end

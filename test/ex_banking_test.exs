@@ -90,8 +90,8 @@ defmodule ExBankingTest do
     {succeeded_cnt_1, _, _} = run_in_parallel(parallel_cnt, fn i -> ExBanking.deposit(user, i, currency) end)
     assert succeeded_cnt_1 < parallel_cnt
     assert succeeded_cnt_1 >= max_requests
-    #TODO: succeeded count can be > 10 if config :account_crud_delay is 0
     if account_crud_delay > 0 do
+      #TIP: succeeded count can be > 10 if config :account_crud_delay is 0
       assert succeeded_cnt_1 == max_requests
     end
 
